@@ -3,6 +3,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { updatePlane9 } from './helpers.js'
 import { getMat } from './nodeMaterial2.js';
 import { dum_dum } from '../dd.js';
+import { ddx } from '../ddx.js';
 
 
 let camera, scene, renderer, controls;
@@ -39,7 +40,7 @@ for(let x=0; x<518; x++){
 
 const planeGeo = new THREE.PlaneGeometry(BOARD_SIZE, BOARD_SIZE, curve_points-1, curve_points-1);
 planeGeo.rotateX(-Math.PI / 2); // make its normal point up +Y
-const g2 = updatePlane9(planeGeo, dum_dum, curve_points);
+const g2 = updatePlane9(planeGeo, ddx, curve_points);
 const terrainMat = getMat(g2);
 const terrainMesh = new THREE.Mesh(g2, terrainMat);
 terrainMesh.castShadow = true;      // if you want the terrain to cast onto others

@@ -8,7 +8,7 @@ import { MeshStandardNodeMaterial, DoubleSide } from 'three/webgpu';
 const vHeight = varying(float());
 const vNormal = varying(vec3());
 const COLLECTION_COLORS =  [
-  '#140602',  // Hot orange
+  '#e3390a',  // Hot orange
   '#00D9ff',  // Electric Cyan
   '#FFD93D',  // Bright Yellow
   '#B84FFF',  // Vivid pinky
@@ -37,7 +37,7 @@ export const getMat = (g) => {
     transparent: false,
   });
   
-  const numTimelines = g.userData.numTimelines || 0;
+  const numTimelines = g.userData.numTimelines -1 || 0;
   const maxHeight = float(g.userData.maxHeight || 1.0);
   const gridSize = uniform(g.userData.gridSize);
   const heightTexNode = texture(g.userData.heightTexture);
@@ -139,41 +139,53 @@ export const getMat = (g) => {
   //////////////////////////////////////////////////////////////////////////
   // COLOR NODE ////////////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////
-  redMat.colorNode = Fn(() => {
+ redMat.colorNode = Fn(() => {
 
-    const eps = float(1e-3);
-    const h   = max(vHeight, eps);
-    const hn  = clamp(h.div(maxHeight.add(eps)), 0.0, 1.0); // 0..1
+  const eps = float(1e-3);
+  const h   = max(vHeight, eps);
+  const hn  = clamp(h.div(maxHeight.add(eps)), 0.0, 1.0); // 0..1
 
-    ////////////////////////////////////////////////////////////////////////
-    // Calculate total per vertex //////////////////////////////////////////
-    ////////////////////////////////////////////////////////////////////////
-    let total = float(0.0);
-    for (let i = 0; i < numTimelines; i++) {
-      total = total.add(max(getTimeline(i), eps));
-    }
-    total = max(total, eps);
+  // 1) Early out if there are no real timelines (only date)
+  if (numTimelines <= 1) {
+    return bandColor(0);
+  }
 
-    ////////////////////////////////////////////////////////////////////////
-    // accumulate edges + band colors  /////////////////////////////////////
-    ////////////////////////////////////////////////////////////////////////
-    let running  = float(0.0);
-    let prevEdge = float(0.0);
-    let colorOut = bandColor(0); // base color (band 0)
+  //////////////////////////////////////////////////////////////////////
+  // Per-vertex total over real timelines (1..numTimelines-1)
+  //////////////////////////////////////////////////////////////////////
+  let rawTotal = float(0.0);
+  for (let i = 1; i < numTimelines; i++) {
+    rawTotal = rawTotal.add(max(getTimeline(i), 0.0));
+  }
+  rawTotal = max(rawTotal, eps); // avoid div by zero
 
-    for (let i = 0; i < numTimelines; i++) {
-      running = running.add(max(getTimeline(i), eps));
-      let e = clamp(running.div(total), prevEdge, 1.0);
-      prevEdge = e;
+  //////////////////////////////////////////////////////////////////////
+  // Accumulate normalized band fractions -> smoother bands
+  //////////////////////////////////////////////////////////////////////
+  let running  = float(0.0);
+  let prevEdge = float(0.0);
+  let colorOut = bandColor(0); // base color (background band)
 
-      const mask    = step(e, hn);        // 0 before edge i, 1 after
-      const nextCol = bandColor(i + 1);   // color for band i+1
-      colorOut = mix(colorOut, nextCol, mask);
-    }
+  for (let i = 1; i < numTimelines; i++) {
+    const bandValue = max(getTimeline(i), 0.0).div(rawTotal); // 0..1 share
+    running = running.add(bandValue);
 
-    return colorOut;
+    const e = clamp(running, prevEdge, 1.0);
+    prevEdge = e;
 
-  })();
+    const mask    = step(e, hn);      // 0 before edge i, 1 after
+    const nextCol = bandColor(i);     // timeline i -> band i
+    colorOut = mix(colorOut, nextCol, mask);
+  }
+
+  // Optional: prevent fully black when data is extremely sparse
+  const minBrightness = float(0.15);
+  colorOut = colorOut.max(minBrightness);
+
+  return colorOut;
+
+})();
+
 
   return redMat;
 };

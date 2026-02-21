@@ -11,8 +11,10 @@ export function aggregatedEventsToHeightArray(aggregatedEvents) {
 
 
 export function createTextureFromArray(dataArray) {
+    
     const size = Math.sqrt(dataArray.length);
     const data = new Float32Array(dataArray);
+    console.log("height texture size ", size);
     
     const texture = new THREE.DataTexture(
         data,
@@ -31,6 +33,47 @@ export function createTextureFromArray(dataArray) {
     return texture;
 }
 
+export function logScaleHeights(heightArray, scale = 15) {
+  const out = new Float32Array(heightArray.length);
+  for (let i = 0; i < heightArray.length; i++) {
+    const h = heightArray[i];
+    out[i] = h > 0 ? Math.log(h + 1) * scale : 0;
+  }
+  return out;
+}
+
+export function blurHeights(srcArray, gridSize, iterations = 1) {
+  const len = srcArray.length;
+  const src = new Float32Array(srcArray);      // work on a copy
+  const tmp = new Float32Array(len);
+
+  for (let it = 0; it < iterations; it++) {
+    for (let y = 0; y < gridSize; y++) {
+      for (let x = 0; x < gridSize; x++) {
+        let sum = 0;
+        let count = 0;
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            const nx = x + dx;
+            const ny = y + dy;
+            if (nx < 0 || ny < 0 || nx >= gridSize || ny >= gridSize) continue;
+            sum += src[ny * gridSize + nx];
+            count++;
+          }
+        }
+        const center = src[y * gridSize + x];
+        const neighbourAvg = sum / count;
+
+        // 0.7 keeps 70% original shape, 30% blur – tweak to taste
+        const preserve = 0.8;
+        tmp[y * gridSize + x] = center * preserve + neighbourAvg * (1.0 - preserve);
+      }
+    }
+    src.set(tmp);
+  }
+
+  return src;
+}
 
 export function updatePlane9(geo, aggregatedEvents, curve_points = 64) {
   const MAX_TIMELINES = 16;
@@ -69,10 +112,13 @@ export function updatePlane9(geo, aggregatedEvents, curve_points = 64) {
 
   // heights
   const heightArray = aggregatedEventsToHeightArray(aggregatedEvents);
-  const hMatrix = heightArrayToSmoothMatrix(heightArray);
-  const smoothHeightArray = getSmoothArray(hMatrix, curve_points);
+  const gridSize = Math.sqrt(heightArray.length);
+  const logHeights = logScaleHeights(heightArray);
+  const blurH = blurHeights(logHeights, gridSize, 1);
 
-  const heightTexture = createTextureFromArray(heightArray);
+
+  const heightTexture = createTextureFromArray(blurH);
+  
   
 
   const heights = new Float32Array(vertexCount);
@@ -80,7 +126,7 @@ export function updatePlane9(geo, aggregatedEvents, curve_points = 64) {
   let minHeight = Infinity;
 
   for (let i = 0; i < vertexCount; i++) {
-    const h = smoothHeightArray[i] ?? 0;
+    const h = blurH[i] ?? 0;
     heights[i] = h;
     if (h > maxHeight) maxHeight = h;
     if (h < minHeight) minHeight = h;
