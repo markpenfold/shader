@@ -39,9 +39,11 @@ for(let x=0; x<518; x++){
 
 const planeGeo = new THREE.PlaneGeometry(BOARD_SIZE, BOARD_SIZE, curve_points-1, curve_points-1);
 planeGeo.rotateX(-Math.PI / 2); // make its normal point up +Y
-const g2 = updatePlane9(planeGeo, output, curve_points);
+const g2 = updatePlane9(planeGeo, dum_dum, curve_points);
 const terrainMat = getMat(g2);
 const terrainMesh = new THREE.Mesh(g2, terrainMat);
+terrainMesh.castShadow = true;      // if you want the terrain to cast onto others
+terrainMesh.receiveShadow = true;   // needed to see shadows on it
 
 init();
 
@@ -71,26 +73,58 @@ camera.lookAt(0, 0, 0);
 //scene.add(pts);
 
 // lights
-const directionalLight = new THREE.DirectionalLight( '#ffffff',1.1 );
-directionalLight.position.set( 10, 100, -10 );
+const directionalLight = new THREE.DirectionalLight( '#ffffff',0.5 );
+directionalLight.position.set( 10, 150, 300 );
 directionalLight.castShadow = true;
 directionalLight.shadow.mapSize.set( 1024, 1024 );
-directionalLight.shadow.camera.near = 0.1;
-directionalLight.shadow.camera.far = 30;
-directionalLight.shadow.camera.top = 8;
-directionalLight.shadow.camera.right = 8;
-directionalLight.shadow.camera.bottom = - 8;
-directionalLight.shadow.camera.left = - 8;
+directionalLight.shadow.camera.near = 1;
+directionalLight.shadow.camera.far = 400;
+
+const s = 150; // half‑size, must be > BOARD_SIZE/2
+directionalLight.shadow.camera.left   = -s;
+directionalLight.shadow.camera.right  =  s;
+directionalLight.shadow.camera.top    =  s;
+directionalLight.shadow.camera.bottom = -s;
 directionalLight.shadow.normalBias = 0.05;
 directionalLight.shadow.bias = 0.5;
 directionalLight.lookAt(0,0,0);
+
+
+
+const directionalLight2 = new THREE.DirectionalLight( '#ffffff',0.5 );
+directionalLight2.position.set( 10, 150, -300 );
+directionalLight2.castShadow = true;
+directionalLight2.shadow.mapSize.set( 1024, 1024 );
+directionalLight2.shadow.camera.near = 1;
+directionalLight2.shadow.camera.far = 400;
+
+directionalLight2.shadow.camera.left   = -s;
+directionalLight2.shadow.camera.right  =  s;
+directionalLight2.shadow.camera.top    =  s;
+directionalLight2.shadow.camera.bottom = -s;
+directionalLight2.shadow.normalBias = 0.05;
+directionalLight2.shadow.bias = 0.5;
+directionalLight2.lookAt(0,0,0);
+
+
+
+
+
 const helper = new THREE.DirectionalLightHelper( directionalLight, 5 );
 const axis = new THREE.AxesHelper(100);
 scene.add(axis);
 scene.add( directionalLight );
+scene.add( directionalLight2 );
+const helper2 = new THREE.DirectionalLightHelper( directionalLight2, 5 );
+scene.add(helper);
+scene.add(helper2);
 
-const light = new THREE.HemisphereLight( 0xfffffb, 0xffc266, 2 );
+const light = new THREE.HemisphereLight( 0xfffffb, 0xffc266, 0.7 );
 scene.add( light );
+
+const lightHelper = new THREE.DirectionalLightHelper(directionalLight, 10);
+scene.add(lightHelper);
+
 
   
 renderer = new THREE.WebGPURenderer( { antialias: true } );

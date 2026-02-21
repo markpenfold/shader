@@ -9,6 +9,29 @@ export function aggregatedEventsToHeightArray(aggregatedEvents) {
     return heightArray;
 }
 
+
+export function createTextureFromArray(dataArray) {
+    const size = Math.sqrt(dataArray.length);
+    const data = new Float32Array(dataArray);
+    
+    const texture = new THREE.DataTexture(
+        data,
+        size,
+        size,
+        THREE.RedFormat,
+        THREE.FloatType
+    );
+    
+    texture.needsUpdate = true;
+    texture.minFilter = THREE.LinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+    texture.wrapS = THREE.ClampToEdgeWrapping;
+    texture.wrapT = THREE.ClampToEdgeWrapping;
+    
+    return texture;
+}
+
+
 export function updatePlane9(geo, aggregatedEvents, curve_points = 64) {
   const MAX_TIMELINES = 16;
 
@@ -26,15 +49,11 @@ export function updatePlane9(geo, aggregatedEvents, curve_points = 64) {
         new THREE.Float32BufferAttribute(zeroBuf, 1)
       );
     }
-    geo.setAttribute(
-      'heightBuffer',
-      new THREE.Float32BufferAttribute(zeroBuf, 1)
-    );
     return geo;
   }
 
-  const vertexCount = geo.attributes.position.count;
   let numTimelines = aggregatedEvents[0].length;
+  const vertexCount = geo.attributes.position.count; 
 
   if (aggregatedEvents.length !== vertexCount) {
     console.warn('aggregatedEvents length must equal vertex count');
@@ -51,10 +70,10 @@ export function updatePlane9(geo, aggregatedEvents, curve_points = 64) {
   // heights
   const heightArray = aggregatedEventsToHeightArray(aggregatedEvents);
   const hMatrix = heightArrayToSmoothMatrix(heightArray);
-  const smoothHeightArray = getSmoothArray(hMatrix, 32);
+  const smoothHeightArray = getSmoothArray(hMatrix, curve_points);
 
-  const posAttr = geo.attributes.position;
-  const positions = posAttr.array;
+  const heightTexture = createTextureFromArray(heightArray);
+  
 
   const heights = new Float32Array(vertexCount);
   let maxHeight = -Infinity;
@@ -65,13 +84,8 @@ export function updatePlane9(geo, aggregatedEvents, curve_points = 64) {
     heights[i] = h;
     if (h > maxHeight) maxHeight = h;
     if (h < minHeight) minHeight = h;
-    // keep geometry flat; deform in shader
-    // const idx = i * 3;
-    // positions[idx + 1] = h;
   }
 
-  posAttr.needsUpdate = true;
-  geo.computeVertexNormals();
 
   // per‑timeline attributes: always create timeline0..timeline15
   for (let t = 0; t < MAX_TIMELINES; t++) {
@@ -94,18 +108,12 @@ export function updatePlane9(geo, aggregatedEvents, curve_points = 64) {
     );
   }
 
-  // heightBuffer
-  geo.setAttribute('heightBuffer', new THREE.Float32BufferAttribute(heights, 1));
-
-  // vertexIndex if needed
-  const indices = new Float32Array(vertexCount);
-  for (let i = 0; i < vertexCount; i++) indices[i] = i;
-  geo.setAttribute('vertexIndex', new THREE.Float32BufferAttribute(indices, 1));
-
+  geo.userData.heightTexture = heightTexture;
   geo.userData.numTimelines = numTimelines;
   geo.userData.maxHeight = maxHeight;
   geo.userData.minHeight = minHeight;
   geo.userData.maxTimelines = MAX_TIMELINES;
+  geo.userData.gridSize = Math.sqrt(aggregatedEvents.length);
 
   //console.log('✅ updatePlane9 buffers ready, mofo', geo);
   return geo;

@@ -1,14 +1,14 @@
 import {
-  attribute, varying, Fn, 
-  float, vec3, color, clamp, max, step, mix,
-  positionLocal, transformNormalToView, uniform,
+  attribute, varying, Fn, normalView, vertexIndex,texture,
+  float, vec3, color, clamp, max, step, mix, int, uv,
+  positionLocal, transformNormalToView, uniform, vec2,
 } from 'three/tsl';
 import { MeshStandardNodeMaterial, DoubleSide } from 'three/webgpu';
 
 const vHeight = varying(float());
 const vNormal = varying(vec3());
 const COLLECTION_COLORS =  [
-  '#FF6B44',  // Hot orange
+  '#140602',  // Hot orange
   '#00D9ff',  // Electric Cyan
   '#FFD93D',  // Bright Yellow
   '#B84FFF',  // Vivid pinky
@@ -16,6 +16,9 @@ const COLLECTION_COLORS =  [
   '#078216',  // Deep green
   '#4b0782',  // Deep purple
 ];
+const BOARD_SIZE = 200;
+const RESOLUTION = 64;
+
 const MAX_TIMELINES = 16;
 const bandUniforms = COLLECTION_COLORS.map(hex => uniform(color(hex)));
 
@@ -36,7 +39,11 @@ export const getMat = (g) => {
   
   const numTimelines = g.userData.numTimelines || 0;
   const maxHeight = float(g.userData.maxHeight || 1.0);
-  const heightAttr   = attribute('heightBuffer');   // StorageBufferAttribute
+  const gridSize = uniform(g.userData.gridSize);
+  const heightTexNode = texture(g.userData.heightTexture);
+  const scale = uniform(1.0);
+  
+
 
   // TIMELINE ATTRIBUTES - MAX IS 16 ///////////////////////////////////////
   // MUST BE EXPLICIT HENCE THE LIST OF CONSTs /////////////////////////////
@@ -86,25 +93,48 @@ export const getMat = (g) => {
 // VERTEX: deform along Y using heightBuffer /////////////////////////////
 //////////////////////////////////////////////////////////////////////////
   redMat.positionNode = Fn(() => {
-    const position = positionLocal.xyz.toVar();
+  const position = positionLocal.xyz.toVar();
+  const gridUV = uv();
 
-    const H = heightAttr;
+  // sample center height from texture
+  const offset   = float(1.0).div(gridSize);
+  const centerH  = heightTexNode.sample(gridUV).r;
 
-    position.y.assign(H);
-    vHeight.assign(H);
+  // write height into Y (Y‑up)
+  position.y.assign(centerH.mul(scale));
+  vHeight.assign(centerH.mul(scale));
 
-    // simple normal from flat plane (0,1,0); you can recompute if needed
-    vNormal.assign(vec3(0.0, 1.0, 0.0));
+  // neighbours for normal
+  const heightRight = heightTexNode.sample(gridUV.add(vec2(offset, 0.0))).r;
+  const heightUp    = heightTexNode.sample(gridUV.add(vec2(0.0, offset))).r;
 
-    return position;
-  })();
+  const posRight = vec3(
+    position.x.add(1.0),
+    heightRight.mul(scale),   // Y
+    position.z
+  );
+  const posUp = vec3(
+    position.x,
+    heightUp.mul(scale),      // Y
+    position.z.add(1.0)
+  );
+
+  const edgeRight = posRight.sub(position);
+  const edgeUp    = posUp.sub(position);
+  //const normal    = edgeRight.cross(edgeUp).normalize();
+  const normal = edgeUp.cross(edgeRight).normalize(); // swapped
+
+  vNormal.assign(normal);
+
+  return position;
+})();
 
 
   //////////////////////////////////////////////////////////////////////////
   // NORMAL NODE ///////////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////
   redMat.normalNode = transformNormalToView(vNormal);
-
+// redMat.normalNode = vNormal; 
 
   //////////////////////////////////////////////////////////////////////////
   // COLOR NODE ////////////////////////////////////////////////////////////
